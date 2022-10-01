@@ -567,6 +567,9 @@ include Makefile.split
 
 # Source code files
 LEVEL_C_FILES := $(wildcard levels/*/leveldata.c) $(wildcard levels/*/script.c) $(wildcard levels/*/geo.c)
+ifeq ($(RM2C),1)
+  LEVEL_C_FILES += $(wildcard levels/*/custom.leveldata.c) $(wildcard levels/*/custom.script.c) $(wildcard levels/*/custom.geo.c)
+endif
 C_FILES       := $(foreach dir,$(SRC_DIRS),$(wildcard $(dir)/*.c)) $(LEVEL_C_FILES)
 CXX_FILES     := $(foreach dir,$(SRC_DIRS),$(wildcard $(dir)/*.cpp))
 S_FILES       := $(foreach dir,$(SRC_DIRS),$(wildcard $(dir)/*.s))
@@ -1060,7 +1063,7 @@ else
 EXT_PREFIX :=
 endif
 
-# N64 conversion tools
+# Executable tools
 MIO0TOOL              := $(TOOLS_DIR)/mio0$(EXT_PREFIX)
 N64CKSUM              := $(TOOLS_DIR)/n64cksum$(EXT_PREFIX)
 N64GRAPHICS           := $(TOOLS_DIR)/n64graphics$(EXT_PREFIX)
@@ -1076,8 +1079,10 @@ else
   RSPASM := $(TOOLS_DIR)/armips$(EXT_PREFIX)
 endif
 
+# Python tools
 ZEROTERM         := $(PYTHON) $(TOOLS_DIR)/zeroterm.py
 GET_GODDARD_SIZE := $(PYTHON) $(TOOLS_DIR)/getGoddardSize.py
+BINPNG           := $(TOOLS_DIR)/BinPNG.py
 
 ENDIAN_BITWIDTH  := $(BUILD_DIR)/endian-and-bitwidth
 
@@ -1212,11 +1217,14 @@ else
 endif
 
 SOUND_FILES := $(SOUND_BIN_DIR)/sound_data.ctl $(SOUND_BIN_DIR)/sound_data.tbl $(SOUND_BIN_DIR)/sequences.bin $(SOUND_BIN_DIR)/bank_sets
+SOUND_FILES_SH :=
 ifeq ($(VERSION),sh)
   ifeq ($(EXTERNAL_DATA),1)
-    SOUND_FILES += $(SOUND_BIN_DIR)/sequences_header $(SOUND_BIN_DIR)/ctl_header $(SOUND_BIN_DIR)/tbl_header
+    SOUND_FILES_SH := $(SOUND_BIN_DIR)/sequences_header $(SOUND_BIN_DIR)/ctl_header $(SOUND_BIN_DIR)/tbl_header
+    SOUND_FILES += $(SOUND_FILES_SH)
   else
-    $(BUILD_DIR)/src/audio/load_sh.o: $(SOUND_BIN_DIR)/bank_sets.inc.c $(SOUND_BIN_DIR)/sequences_header.inc.c $(SOUND_BIN_DIR)/ctl_header.inc.c $(SOUND_BIN_DIR)/tbl_header.inc.c
+    SOUND_FILES_SH := $(SOUND_BIN_DIR)/bank_sets.inc.c $(SOUND_BIN_DIR)/sequences_header.inc.c $(SOUND_BIN_DIR)/ctl_header.inc.c $(SOUND_BIN_DIR)/tbl_header.inc.c
+    $(BUILD_DIR)/src/audio/load_sh.o: $(SOUND_FILES_SH)
   endif
 endif
 
@@ -1359,14 +1367,14 @@ $(BUILD_DIR)/%.inc.c: %.png
 	$(V)$(N64GRAPHICS) -s $(TEXTURE_ENCODING) -i $@ -g $< -f $(lastword ,$(subst ., ,$(basename $<)))
 
 # Color Index CI8
-$(BUILD_DIR)/%.ci8: %.ci8.png
-	$(call print,Converting:,$<,$@)
-	$(V)$(N64GRAPHICS_CI) -i $@ -g $< -f ci8
+$(BUILD_DIR)/%.ci8.inc.c: %.ci8.png
+	$(call print,Converting CI:,$<,$@)
+	$(PYTHON) $(BINPNG) $< $@ 8
 
 # Color Index CI4
-$(BUILD_DIR)/%.ci4: %.ci4.png
-	$(call print,Converting:,$<,$@)
-	$(V)$(N64GRAPHICS_CI) -i $@ -g $< -f ci4
+$(BUILD_DIR)/%.ci4.inc.c: %.ci4.png
+	$(call print,Converting CI:,$<,$@)
+	$(PYTHON) $(BINPNG) $< $@ 4
 endif
 
 #==============================================================================#
@@ -1382,7 +1390,7 @@ $(BUILD_DIR)/%.elf: $(BUILD_DIR)/%.o
 # Override for leveldata.elf, which otherwise matches the above pattern
 .SECONDEXPANSION:
 $(BUILD_DIR)/levels/%/leveldata.elf: $(BUILD_DIR)/levels/%/leveldata.o $(BUILD_DIR)/bin/$$(TEXTURE_BIN).elf
-	$(call print,Linking ELF file:,$<,$@)
+	$(call print,Linking level ELF file:,$<,$@)
 	$(V)$(LD) -e 0 -Ttext=$(SEGMENT_ADDRESS) -Map $@.map --just-symbols=$(BUILD_DIR)/bin/$(TEXTURE_BIN).elf -o $@ $<
 
 $(BUILD_DIR)/%.bin: $(BUILD_DIR)/%.elf
@@ -1455,6 +1463,12 @@ $(SOUND_BIN_DIR)/%.m64: $(SOUND_BIN_DIR)/%.o
 #==============================================================================#
 # Generated Source Code Files                                                  #
 #==============================================================================#
+
+# Convert binary file to a comma-separated list of byte values for inclusion in C code
+$(BUILD_DIR)/%.inc.c: $(BUILD_DIR)/%
+	$(call print,Converting to C:,$<,$@)
+	$(V)hexdump -v -e '1/1 "0x%X,"' $< > $@
+	$(V)echo >> $@
 
 # Generate animation data
 $(BUILD_DIR)/assets/mario_anim_data.c: $(wildcard assets/anims/*.inc.c)

@@ -696,7 +696,7 @@ s32 mario_floor_is_slope(struct MarioState *m) {
  */
 s32 mario_floor_is_steep(struct MarioState *m) {
     f32 normY;
-#if QOL_FIX_JUMP_KICK_NOT_SLIPPERY
+#if FIX_JUMP_KICK_NOT_SLIPPERY
     if (m->floor->type == SURFACE_NOT_SLIPPERY) {
         return FALSE;
     }
@@ -718,7 +718,7 @@ s32 mario_floor_is_steep(struct MarioState *m) {
             default:
                 normY = 0.8660254f; // ~cos(30 deg)
                 break;
-#if !QOL_FIX_JUMP_KICK_NOT_SLIPPERY
+#if !FIX_JUMP_KICK_NOT_SLIPPERY
             case SURFACE_NOT_SLIPPERY:
                 normY = 0.8660254f; // ~cos(30 deg)
                 break;
@@ -1250,6 +1250,26 @@ s32 transition_submerged_to_walking(struct MarioState *m) {
     }
 }
 
+#if FIX_WATER_PLUNGE_UPWARP
+/**
+ * Transitions Mario from a submerged action to an airborne action.
+ * You may want to change these actions to fit your hack
+ */
+s32 transition_submerged_to_airborne(struct MarioState *m) {
+    set_camera_mode(m->area->camera, m->area->camera->defMode, 1);
+
+    vec3_zero(m->angleVel);
+
+    if (m->heldObj == NULL) {
+        if (m->input & INPUT_A_DOWN) return set_mario_action(m, ACT_DIVE, 0);
+        else return set_mario_action(m, ACT_FREEFALL, 0);
+    } else {
+        if (m->input & INPUT_A_DOWN) return set_mario_action(m, ACT_HOLD_JUMP, 0);
+        else return set_mario_action(m, ACT_HOLD_FREEFALL, 0);
+    }
+}
+#endif
+
 /**
  * This is the transition function typically for entering a submerged action for a
  * non-submerged action. This also applies the water surface camera preset.
@@ -1258,7 +1278,10 @@ s32 set_water_plunge_action(struct MarioState *m) {
     m->forwardVel = m->forwardVel / 4.0f;
     m->vel[1] = m->vel[1] / 2.0f;
 
+#if !FIX_WATER_PLUNGE_UPWARP
+    //! Causes waterbox upwarp
     m->pos[1] = m->waterLevel - 100;
+#endif
 
     m->faceAngle[2] = 0;
 
@@ -1604,7 +1627,7 @@ void update_mario_health(struct MarioState *m) {
         // Play a noise to alert the player when Mario is close to drowning.
 
         if (((m->action & ACT_GROUP_MASK) == ACT_GROUP_SUBMERGED) && (m->health < 0x300)
-#if QOL_FIX_DROWING_SOUND_METAL
+#if NO_DROWING_SOUND_METAL
         && !(m->flags & (MARIO_METAL_CAP))
 #endif
         ) {
@@ -1761,7 +1784,7 @@ void mario_update_hitbox_and_cap_model(struct MarioState *m) {
 
     // Short hitbox for crouching/crawling/etc.
     if (m->action & (ACT_FLAG_SHORT_HITBOX
-#if QOL_FIX_SHORT_HITBOX_SLIDE_ACTS
+#if FIX_SHORT_HITBOX_SLIDE_ACTS
         | ACT_FLAG_BUTT_OR_STOMACH_SLIDE
 #endif
     )) {
@@ -1892,7 +1915,7 @@ s32 execute_mario_action(UNUSED struct Object *o) {
         }
 
         if (gMarioState->floor->type == SURFACE_VERTICAL_WIND
-#if QOL_FIX_SURFACE_WIND_DETECTION
+#if FIX_SURFACE_WIND_DETECTION
         && (gMarioState->action == ACT_VERTICAL_WIND)
 #endif
         ) {
@@ -2019,7 +2042,7 @@ void init_mario_from_save_file(void) {
         save_file_get_total_star_count(gCurrSaveFileNum - 1, COURSE_MIN - 1, COURSE_MAX - 1);
     gMarioState->numKeys = 0;
 
-    gMarioState->numLives = 4;
+    gMarioState->numLives = MARIO_START_LIVES;
     gMarioState->health = 0x880;
 
     gMarioState->prevNumStarsForDialog = gMarioState->numStars;
